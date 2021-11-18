@@ -1,9 +1,13 @@
 #!/usr/bin/env python
 
+from multiprocessing import process
 import cdsapi
 import pandas as pd
 import os
 import time
+import multiprocessing 
+
+
 
 c = cdsapi.Client()
 
@@ -97,14 +101,15 @@ dates = DateRange2String(start_date,end_date)
 # Loop over the combination of dates and variables 
 # Note that all models have been selected manually by "hard coding"
 for date in dates:
-    for variable in variables:
+
+    def process_variable(variable):
 
         file_name = date+"-all-models-"+variable+".zip"
         print("Attempting to look for: ",file_name)
   
         # If file does not exist: download
         counter = 0     
-        while os.path.isfile("complete-files/"+file_name) == False:
+        while not os.path.isfile("complete-files/"+file_name) and counter < 5:
             counter += 1
 
             try:
@@ -121,7 +126,6 @@ for date in dates:
                 print("Now let's wait 2 min before re-try...")
                 time.sleep(120)
 
-            # Limit the number of attempts to get data
-            if counter > 5:
-                break
-      
+   
+    with multiprocessing.Pool(4) as p:
+        p.map(process_variable, variables)
