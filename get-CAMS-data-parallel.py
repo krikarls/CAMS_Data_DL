@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from enum import Enum
@@ -105,7 +105,7 @@ def date_range(
 def main():
     client = cdsapi.Client()
     for date in date_range("2021-06-01", "2021-08-31"):
-        with ProcessPoolExecutor(max_workers=4) as executor:
+        with ThreadPoolExecutor(max_workers=4) as executor:
             futures = [
                 executor.submit(download_data, client, date, model)
                 for model in ModelName
