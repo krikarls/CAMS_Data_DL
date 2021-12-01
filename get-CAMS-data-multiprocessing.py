@@ -110,9 +110,9 @@ def main():
                 executor.submit(download_data, client, date, model)
                 for model in ModelName
             ]
-        for future in as_completed(futures):
-            if (exception := future.exception()) is not None:
-                raise exception
+            for future in as_completed(futures):
+                if (exception := future.exception()) is not None:
+                    raise exception
 
 
 if __name__ == "__main__":
