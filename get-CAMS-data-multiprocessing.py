@@ -4,35 +4,42 @@ from __future__ import annotations
 
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime, timedelta
+from enum import Enum
 from pathlib import Path
 from typing import Generator
 
 import cdsapi
 
-MODELS: list[str] = [
-    "chimere",
-    "dehm",
-    "emep",
-    "ensemble",
-    "euradim",
-    "gemaq",
-    "lotos",
-    "match",
-    "mocage",
-    "silam",
-]
 
-VARIABLES: list[str] = [
-    "nitrogen_dioxide",
-    "ozone",
-    "particulate_matter_10um",
-    "particulate_matter_2.5um",
-    "sulphur_dioxide",
-    "carbon_monoxide",
-]
+class ModelName(str, Enum):
+    EMEP = "emep"
+    DELH = "dehm"
+    EURAD = "euradim"
+    GEMAQ = "gemaq"
+    LOTOS = "lotos"
+    MATCH = "match"
+    SILAM = "silam"
+    MOCAGE = "mocage"
+    CHIMERE = "chimere"
+    ENSEMBLE = "ensemble"
+
+    def __str__(self) -> str:
+        return self.value
 
 
-def download_data(client: cdsapi.Client, date: datetime, model: str, *, tries: int = 5):
+class PollutantName(str, Enum):
+    NO2 = "nitrogen_dioxide"
+    O3 = "ozone"
+    PM10 = "particulate_matter_10um"
+    PM25 = "particulate_matter_2.5um"
+    SO2 = "sulphur_dioxide"
+    CO = "carbon_monoxide"
+
+    def __str__(self) -> str:
+        return self.value
+
+
+def download_data(client: cdsapi.Client, date: datetime, model: ModelName, *, tries: int = 5):
     path = Path(f"{date:%F}-{model}.nc")
     if path.exists():
         print(f"found {path.name}, skip")
@@ -42,7 +49,7 @@ def download_data(client: cdsapi.Client, date: datetime, model: str, *, tries: i
         model=model,
         date=f"{date:%F}",
         format="netcdf",
-        variable=VARIABLES,
+        variable=[str(poll) for poll in PollutantName],
         level="0",
         type="forecast",
         time="00:00",
@@ -83,7 +90,9 @@ def main():
     client = cdsapi.Client()
     for date in date_range("2021-06-01", "2021-08-31"):
         with ProcessPoolExecutor(max_workers=4) as executor:
-            futures = [executor.submit(download_data, client, date, model) for model in MODELS]
+            futures = [
+                executor.submit(download_data, client, date, model) for model in ModelName
+            ]
         for future in as_completed(futures):
             if (exception := future.exception()) is not None:
                 raise exception
