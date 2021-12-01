@@ -5,7 +5,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 
 from cdsapi import Client
 
-from .CAMS2_83 import ModelName, date_range, download_data
+from CAMS2_83 import ModelName, date_range, download_data
 
 
 def main():
