@@ -97,10 +97,9 @@ def date_range(
     if isinstance(end_date, str):
         end_date = datetime.strptime(end_date, "%Y-%m-%d")
 
-    date = start_date
-    while date <= end_date:
-        yield date
-        date += timedelta(days=1)
+    days = (end_date - start_date) // timedelta(days=1)
+    for day in range(days):
+        yield start_date + timedelta(days=day)
 
 
 def main():
