@@ -1,131 +1,92 @@
 #!/usr/bin/env python
 
-from multiprocessing import process
+from __future__ import annotations
+
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Generator
+
 import cdsapi
-import pandas as pd
-import os
-import time
-import multiprocessing 
+
+MODELS: list[str] = [
+    "chimere",
+    "dehm",
+    "emep",
+    "ensemble",
+    "euradim",
+    "gemaq",
+    "lotos",
+    "match",
+    "mocage",
+    "silam",
+]
+
+VARIABLES: list[str] = [
+    "nitrogen_dioxide",
+    "ozone",
+    "particulate_matter_10um",
+    "particulate_matter_2.5um",
+]
 
 
-
-c = cdsapi.Client()
-
-
-def DownloadData(date,variable):
-
-    c.retrieve(
-        'cams-europe-air-quality-forecasts',
-        {
-            'model': [
-                'chimere', 'dehm', 'emep',
-                'ensemble', 'euradim', 'gemaq',
-                'lotos', 'match', 'mocage',
-                'silam',
-            ],
-            'date': date,
-            'format': 'netcdf',
-            'variable': variable,
-            'level': '0',
-            'type': 'forecast',
-            'time': '00:00',
-            'leadtime_hour': [
-                '0', '1', '10',
-                '11', '12', '13',
-                '14', '15', '16',
-                '17', '18', '19',
-                '2', '20', '21',
-                '22', '23', '24',
-                '25', '26', '27',
-                '28', '29', '3',
-                '30', '31', '32',
-                '33', '34', '35',
-                '36', '37', '38',
-                '39', '4', '40',
-                '41', '42', '43',
-                '44', '45', '46',
-                '47', '48', '49',
-                '5', '50', '51',
-                '52', '53', '54',
-                '55', '56', '57',
-                '58', '59', '6',
-                '60', '61', '62',
-                '63', '64', '65',
-                '66', '67', '68',
-                '69', '7', '70',
-                '71', '72', '73',
-                '74', '75', '76',
-                '77', '78', '79',
-                '8', '80', '81',
-                '82', '83', '84',
-                '85', '86', '87',
-                '88', '89', '9',
-                '90', '91', '92',
-                '93', '94', '95',
-                '96',
-            ],
-        },
-        date+"-all-models-"+variable+".zip")
+client = cdsapi.Client()
 
 
+def download_data(date: datetime, variable: str, *, tries: int = 5):
+    path = Path(f"{date:%F}-all-models-{variable}.zip")
+    if path.exists():
+        print(f"found {path.name}, skip")
+        return
 
-def DateRange2String(start_date,end_date):
-    """Returns a string of dates from start_date to end_date"""
-    dates = pd.date_range(start=start_date, end=end_date)
+    request = dict(
+        model=MODELS,
+        date=f"{date:%F}",
+        format="netcdf",
+        variable=variable,
+        level="0",
+        type="forecast",
+        time="00:00",
+        leadtime_hour=[str(h) for h in range(97)],
+    )
 
-    dates_string = []
-    for date in dates:      
-        date_str = str(date.date())
-        dates_string.append(date_str)
+    print(f"download {path.name}")
+    path.parent.mkdir(exist_ok=True, parents=True)
+    tmp = path.with_suffix(".tmp")
+    for retry in range(1, tries + 1):
+        try:
+            client.retrieve("cams-europe-air-quality-forecasts", request, tmp)
+        except Exception as e:
+            print(f"{date} try #{retry} raised {e}")
+        else:
+            tmp.rename(path)
+            break
 
-
-    return dates_string
-
-
-
-# Model names
-models = ['chimere','dehm','emep','ensemble','euradim','gemaq','lotos', 'match', 'mocage','silam']
-
-
-# Variables
-variables = ['nitrogen_dioxide','ozone','particulate_matter_10um','particulate_matter_2.5um']
-
-
-# Dates
-start_date = '2021-06-01'
-end_date = '2021-08-31'
-
-dates = DateRange2String(start_date,end_date)
+    if not path.exists():
+        raise RuntimeError(f"failed to download {path.name}")
 
 
-# Loop over the combination of dates and variables 
-# Note that all models have been selected manually by "hard coding"
-for date in dates:
+def date_range(
+    start_date: str | datetime, end_date: str | datetime
+) -> Generator[datetime, None, None]:
+    """dates from start_date to end_date"""
+    if isinstance(start_date, str):
+        start_date = datetime.strptime(start_date, "%Y-%m-%d")
+    if isinstance(end_date, str):
+        end_date = datetime.strptime(end_date, "%Y-%m-%d")
 
-    def process_variable(variable):
+    while date:=start_date <= end_date:
+        yield date
+        date += timedelta(days=1)
 
-        file_name = date+"-all-models-"+variable+".zip"
-        print("Attempting to look for: ",file_name)
-  
-        # If file does not exist: download
-        counter = 0     
-        while not os.path.isfile("complete-files/"+file_name) and counter < 5:
-            counter += 1
+def main():
+    for date in date_range("2021-06-01", "2021-08-31"):
+        with ProcessPoolExecutor(max_workers=4) as executor:
+            futures = [executor.submit(download_data, date, var) for var in VARIABLES]
+        for future in as_completed(futures):
+            if exception := future.exception() is not None:
+                raise exception
 
-            try:
-                DownloadData(date,variable)
-                print("Download complete: "+file_name)
-                os.system("mv "+file_name+" complete-files")
 
-            except Exception as ex:
-                # Print exeption error msg
-                template = "An exception of type {0} occurred. Arguments:\n{1!r}"
-                error_message = template.format(type(ex).__name__, ex.args)
-                print(error_message)
-
-                print("Now let's wait 2 min before re-try...")
-                time.sleep(120)
-
-   
-    with multiprocessing.Pool(4) as p:
-        p.map(process_variable, variables)
+if __name__ == "__main__":
+    main()
