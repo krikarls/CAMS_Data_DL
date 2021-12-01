@@ -33,17 +33,17 @@ VARIABLES: list[str] = [
 client = cdsapi.Client()
 
 
-def download_data(date: datetime, variable: str, *, tries: int = 5):
-    path = Path(f"{date:%F}-all-models-{variable}.zip")
+def download_data(date: datetime, model: str, *, tries: int = 5):
+    path = Path(f"{date:%F}-{model}.nc")
     if path.exists():
         print(f"found {path.name}, skip")
         return
 
     request = dict(
-        model=MODELS,
+        model=model,
         date=f"{date:%F}",
         format="netcdf",
-        variable=variable,
+        variable=VARIABLES,
         level="0",
         type="forecast",
         time="00:00",
@@ -82,7 +82,7 @@ def date_range(
 def main():
     for date in date_range("2021-06-01", "2021-08-31"):
         with ProcessPoolExecutor(max_workers=4) as executor:
-            futures = [executor.submit(download_data, date, var) for var in VARIABLES]
+            futures = [executor.submit(download_data, date, model) for model in MODELS]
         for future in as_completed(futures):
             if exception := future.exception() is not None:
                 raise exception
