@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
+from time import perf_counter
 from typing import Generator
 
 import cdsapi
@@ -39,7 +41,21 @@ class PollutantName(str, Enum):
         return self.value
 
 
-def download_data(client: cdsapi.Client, date: datetime, model: ModelName, *, tries: int = 5):
+@contextmanager
+def perf_timer(message: str = "took"):
+    try:
+        print(message)
+        seconds = -perf_counter()
+        yield
+    finally:
+        seconds += perf_counter()
+        delta = timedelta(seconds=int(seconds))
+        print(f"{message} {delta}")
+
+
+def download_data(
+    client: cdsapi.Client, date: datetime, model: ModelName, *, tries: int = 5
+):
     path = Path(f"{date:%F}-{model}.nc")
     if path.exists():
         print(f"found {path.name}, skip")
@@ -56,17 +72,17 @@ def download_data(client: cdsapi.Client, date: datetime, model: ModelName, *, tr
         leadtime_hour=[str(h) for h in range(97)],
     )
 
-    print(f"download {path.name}")
-    path.parent.mkdir(exist_ok=True, parents=True)
-    tmp = path.with_suffix(".tmp")
-    for retry in range(1, tries + 1):
-        try:
-            client.retrieve("cams-europe-air-quality-forecasts", request, tmp)
-        except Exception as e:
-            print(f"{date} try #{retry} raised {e}")
-        else:
-            tmp.rename(path)
-            break
+    with perf_timer(f"downloading {path.name}"):
+        path.parent.mkdir(exist_ok=True, parents=True)
+        tmp = path.with_suffix(".tmp")
+        for retry in range(1, tries + 1):
+            try:
+                client.retrieve("cams-europe-air-quality-forecasts", request, tmp)
+            except Exception as e:
+                print(f"{path.name} try #{retry} raised {e}")
+            else:
+                tmp.rename(path)
+                break
 
     if not path.exists():
         raise RuntimeError(f"failed to download {path.name}")
@@ -91,7 +107,8 @@ def main():
     for date in date_range("2021-06-01", "2021-08-31"):
         with ProcessPoolExecutor(max_workers=4) as executor:
             futures = [
-                executor.submit(download_data, client, date, model) for model in ModelName
+                executor.submit(download_data, client, date, model)
+                for model in ModelName
             ]
         for future in as_completed(futures):
             if (exception := future.exception()) is not None:
