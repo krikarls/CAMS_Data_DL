@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 from __future__ import annotations
 
@@ -77,7 +77,7 @@ def date_range(
     if isinstance(end_date, str):
         end_date = datetime.strptime(end_date, "%Y-%m-%d")
 
-    while date:=start_date <= end_date:
+    while (date:=start_date) <= end_date:
         yield date
         date += timedelta(days=1)
 
@@ -86,7 +86,7 @@ def main():
         with ProcessPoolExecutor(max_workers=4) as executor:
             futures = [executor.submit(download_data, date, model) for model in MODELS]
         for future in as_completed(futures):
-            if exception := future.exception() is not None:
+            if (exception:=future.exception()) is not None:
                 raise exception
 
 
