@@ -97,7 +97,8 @@ def date_range(
     if isinstance(end_date, str):
         end_date = datetime.strptime(end_date, "%Y-%m-%d")
 
-    while (date := start_date) <= end_date:
+    date = start_date
+    while date <= end_date:
         yield date
         date += timedelta(days=1)
 
