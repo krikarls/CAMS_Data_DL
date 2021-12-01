@@ -28,14 +28,11 @@ VARIABLES: list[str] = [
     "particulate_matter_10um",
     "particulate_matter_2.5um",
     "sulphur_dioxide",
-    "carbon_monoxide"
+    "carbon_monoxide",
 ]
 
 
-client = cdsapi.Client()
-
-
-def download_data(date: datetime, model: str, *, tries: int = 5):
+def download_data(client: cdsapi.Client, date: datetime, model: str, *, tries: int = 5):
     path = Path(f"{date:%F}-{model}.nc")
     if path.exists():
         print(f"found {path.name}, skip")
@@ -77,16 +74,18 @@ def date_range(
     if isinstance(end_date, str):
         end_date = datetime.strptime(end_date, "%Y-%m-%d")
 
-    while (date:=start_date) <= end_date:
+    while (date := start_date) <= end_date:
         yield date
         date += timedelta(days=1)
 
+
 def main():
+    client = cdsapi.Client()
     for date in date_range("2021-06-01", "2021-08-31"):
         with ProcessPoolExecutor(max_workers=4) as executor:
-            futures = [executor.submit(download_data, date, model) for model in MODELS]
+            futures = [executor.submit(download_data, client, date, model) for model in MODELS]
         for future in as_completed(futures):
-            if (exception:=future.exception()) is not None:
+            if (exception := future.exception()) is not None:
                 raise exception
 
 
