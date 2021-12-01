@@ -27,6 +27,8 @@ VARIABLES: list[str] = [
     "ozone",
     "particulate_matter_10um",
     "particulate_matter_2.5um",
+    "sulphur_dioxide",
+    "carbon_monoxide"
 ]
 
 
